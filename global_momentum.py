@@ -1,16 +1,14 @@
 # -*- coding: utf-8 -*-
 import streamlit as st
-import requests
 import pandas as pd
 import numpy as np
 import yfinance as yf
-from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
 import warnings
 warnings.filterwarnings('ignore')
 
 st.set_page_config(
-    page_title="Global Country Momentum",
+    page_title="Global Full-Country Momentum",
     page_icon="🌍",
     layout="wide"
 )
@@ -31,10 +29,28 @@ html, body, [class*="css"] { font-family: 'IBM Plex Sans', sans-serif; }
 
 st.markdown("""
 <div class="title-block">
-  <h1>iShares Country ETF Momentum Picker</h1>
-  <p>iShares 전 세계 국가별 ETF 라인업 실시간 스캔 및 모멘텀 분석</p>
+  <h1>Global Country ETF Radar</h1>
+  <p>전 세계 46개 국가 iShares ETF 실시간 전수 조사 및 모멘텀 분석</p>
 </div>
 """, unsafe_allow_html=True)
+
+# ── 국가별 ETF 전수 라인업 (46개국) ───────────────────────────
+COUNTRY_ETFS = {
+    # 미주 (7)
+    'IVV': '미국', 'EWC': '캐나다', 'EWW': '멕시코', 'EWZ': '브라질', 'ECH': '칠레', 'EPU': '페루', 'ARGT': '아르헨티나',
+    # 아시아/오세아니아 (12)
+    'EWY': '한국', 'EWJ': '일본', 'MCHI': '중국', 'EWT': '대만', 'INDA': '인도', 'EWA': '호주', 'ENZL': '뉴질랜드', 
+    'EWS': '싱가포르', 'EWM': '말레이시아', 'THD': '태국', 'EIDO': '인도네시아', 'EPHE': '필리핀',
+    # 서유럽/남유럽 (9)
+    'EWG': '독일', 'EWU': '영국', 'EWQ': '프랑스', 'EWI': '이탈리아', 'EWP': '스페인', 'EWL': '스위스', 
+    'EWN': '네덜란드', 'EWK': '벨기에', 'EIRL': '아일랜드',
+    # 북유럽/동유럽 (8)
+    'EWD': '스웨덴', 'EDEN': '덴마크', 'ENOR': '노르웨이', 'EFNL': '핀란드', 'EWO': '오스트리아', 
+    'EPOL': '폴란드', 'GREK': '그리스', 'PGAL': '포르투갈',
+    # 중동/아프리카 (10)
+    'EIS': '이스라엘', 'TUR': '튀르키예', 'EZA': '남아프리카공화국', 'KSA': '사우디아라비아', 
+    'QAT': '카타르', 'UAE': '아랍에미리트', 'EGPT': '이집트', 'KWT': '쿠웨이트', 'NGE': '나이지리아', 'AFK': '아프리카전체'
+}
 
 # ── 모멘텀 계산 함수 ──────────────────────────────────────────
 def avg_momentum(series):
@@ -44,40 +60,16 @@ def avg_momentum(series):
     r1, r3, r6, r12 = p/s.iloc[-2]-1, p/s.iloc[-4]-1, p/s.iloc[-7]-1, p/s.iloc[-13]-1
     return (r1+r3+r6+r12)/4, r1, r3, r6, r12
 
-# ── 실시간 국가 ETF 스크래핑 ──────────────────────────────────
-@st.cache_data(ttl=86400)
-def get_all_country_etfs():
-    scraped_dict = {}
-    try:
-        # 위키피디아 iShares 리스트 페이지
-        url = "https://en.wikipedia.org/wiki/List_of_iShares_ETFs"
-        headers = {"User-Agent": "Mozilla/5.0"}
-        resp = requests.get(url, headers=headers, timeout=15)
-        tables = pd.read_html(resp.text)
-        
-        for t in tables:
-            cols = [str(c).lower() for c in t.columns]
-            if any('ticker' in c for c in cols) and any('country' in c or 'market' in c for c in cols):
-                t_col = next(c for c in t.columns if 'ticker' in str(c).lower())
-                n_col = next(c for c in t.columns if 'country' in str(c).lower() or 'market' in str(c).lower())
-                for _, row in t.iterrows():
-                    tk, nm = str(row[t_col]).strip(), str(row[n_col]).strip()
-                    if len(tk) <= 4 and tk.isalpha() and 'world' not in nm.lower():
-                        scraped_dict[tk] = nm
-    except: pass
-    
-    # 폴백 (스크래핑 실패 대비 핵심 국가)
-    fallback = {'IVV':'미국','EWY':'한국','EWJ':'일본','MCHI':'중국','EWG':'독일','EWU':'영국','INDA':'인도','EWT':'대만','EWC':'캐나다','EWA':'호주','EWZ':'브라질'}
-    return (list(scraped_dict.keys()), scraped_dict) if len(scraped_dict) > 10 else (list(fallback.keys()), fallback)
-
 # ── 실행 로직 ─────────────────────────────────────────────────
-if st.button("🚀 전 세계 국가 모멘텀 분석 시작", type="primary"):
-    with st.status("데이터 분석 중...", expanded=True) as status:
-        tickers, name_map = get_all_country_etfs()
-        st.write(f"✅ {len(tickers)}개 국가 ETF 라인업 확인 완료")
+if st.button("🚀 전 세계 46개국 모멘텀 전수 조사 시작", type="primary"):
+    with st.status("글로벌 데이터 수집 및 분석 중...", expanded=True) as status:
+        tickers = list(COUNTRY_ETFS.keys())
+        st.write(f"📡 {len(tickers)}개국 데이터를 수집합니다. 잠시만 기다려 주세요...")
         
         end = datetime.today()
         start = end - timedelta(days=430)
+        
+        # 주가 다운로드
         raw = yf.download(tickers + ['TIP'], start=start.strftime('%Y-%m-%d'), end=end.strftime('%Y-%m-%d'), auto_adjust=True, progress=False)
         prices = raw['Close'] if isinstance(raw.columns, pd.MultiIndex) else raw[['Close']]
         monthly = prices.resample('ME').last()
@@ -91,22 +83,41 @@ if st.button("🚀 전 세계 국가 모멘텀 분석 시작", type="primary"):
             if tk in monthly.columns:
                 m, r1, r3, r6, r12 = avg_momentum(monthly[tk])
                 if not np.isnan(m):
-                    rows.append({'티커': tk, '국가': name_map.get(tk, tk), '평균모멘텀(%)': round(m*100, 2), '1M': round(r1*100, 2), '3M': round(r3*100, 2), '6M': round(r6*100, 2), '12M': round(r12*100, 2)})
+                    rows.append({
+                        '티커': tk, 
+                        '국가': COUNTRY_ETFS[tk], 
+                        '평균모멘텀(%)': round(m*100, 2), 
+                        '1M': round(r1*100, 2), 
+                        '3M': round(r3*100, 2), 
+                        '6M': round(r6*100, 2), 
+                        '12M': round(r12*100, 2)
+                    })
         
         df = pd.DataFrame(rows).sort_values('평균모멘텀(%)', ascending=False).reset_index(drop=True)
         df.index += 1
-        status.update(label="분석 완료!", state="complete")
+        status.update(label="전 세계 분석 완료!", state="complete")
 
     st.divider()
+    
+    # 상단 정보 카드
+    c1, c2, c3 = st.columns(3)
+    tip_txt = f"{tip_avg*100:+.2f}%" if not np.isnan(tip_avg) else "N/A"
+    c1.markdown(f'<div class="metric-box"><div style="font-size:0.75rem; color:#1e3a8a;">글로벌 거시 필터(TIP)</div><div style="font-size:1.5rem; font-weight:600;">{tip_txt}</div><div style="margin-top:5px;">{"<span class='tag-pass'>PASS</span>" if tip_pass else "<span style='background:#fee2e2; color:#b91c1c; padding:2px 10px; border-radius:99px; font-size:0.8rem; font-weight:600;'>BLOCK</span>"}</div></div>', unsafe_allow_html=True)
+    c2.markdown(f'<div class="metric-box"><div style="font-size:0.75rem; color:#1e3a8a;">분석 국가 수</div><div style="font-size:1.5rem; font-weight:600;">{len(df)}개국</div><div style="margin-top:5px; font-size:0.8rem; color:#64748b;">iShares Full Lineup</div></div>', unsafe_allow_html=True)
+    c3.markdown(f'<div class="metric-box"><div style="font-size:0.75rem; color:#1e3a8a;">마지막 업데이트</div><div style="font-size:1.5rem; font-weight:600;">{datetime.today().strftime("%m/%d")}</div><div style="margin-top:5px; font-size:0.8rem; color:#64748b;">실시간 데이터 기준</div></div>', unsafe_allow_html=True)
+
     if not tip_pass:
-        st.error("⚠️ TIP 필터 차단: 현재 글로벌 시장이 하락 추세입니다. 현금 보유를 권장합니다.")
+        st.error("⚠️ TIP 필터 차단: 글로벌 시장의 위험이 감지되었습니다. 현금(달러) 보유가 유리할 수 있습니다.")
     elif not df.empty:
         best = df.iloc[0]
         st.markdown(f"""
         <div class="winner-card">
-          <div style="font-size:0.8rem; color:#166534;">이번 달 추천 국가</div>
+          <div style="font-size:0.8rem; color:#166534; text-transform:uppercase; letter-spacing:0.1em;">이번 달 글로벌 TOP 1</div>
           <div class="ticker">{best['티커']}</div>
-          <div class="name">{best['국가']}</div>
-          <div style="font-size:1.2rem; font-weight:600; color:#15803d; margin-top:10px;">평균 모멘텀: {best['평균모멘텀(%)']:+.2f}%</div>
+          <div class="name">{best['국가']} 증시</div>
+          <div style="font-size:1.3rem; font-weight:600; color:#15803d; margin-top:10px;">평균 모멘텀 스코어: {best['평균모멘텀(%)']:+.2f}%</div>
+          <div style="font-size:0.85rem; color:#4d7c0f; margin-top:8px;">1M: {best['1M']}% | 3M: {best['3M']}% | 6M: {best['6M']}% | 12M: {best['12M']}%</div>
         </div>""", unsafe_allow_html=True)
-        st.dataframe(df, use_container_width=True)
+        
+        st.subheader("🏆 전 세계 국가별 모멘텀 순위 (전수 조사)")
+        st.dataframe(df.style.background_gradient(cmap='RdYlGn', subset=['평균모멘텀(%)']), use_container_width=True, height=600)
